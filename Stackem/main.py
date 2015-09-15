@@ -74,14 +74,14 @@ def main():
     if args.line:
         from Stackem import LineStacker
 
-        stack = LineStacker(args.image, catalogname, delimiter=delimiter,
-                beam=args.beam, width=self.width, beam2pix=args.b2p,
+        stack = LineStacker.load(args.image, catalogname, delimiter=delimiter,
+                beam=args.beam, width=args.width, beam2pix=args.beam2pix,
                 verbosity=args.vbl)
 
         stacked_line = stack.stack()*1e6 # convert to uJy
         gfit = stack.fit_gaussian(stacked_line)
 
-        freqs = (linspace(-stack.width/2, stack.width/2, self.width)*stack.dfreq - stack.freq0)*1e9 # convert to GHz
+        freqs = (linspace(-stack.width/2, stack.width/2, stack.width)*stack.dfreq - stack.freq0)*1e9 # convert to GHz
 
         # plot profile
         pylab.plot(freqs, stacked_line, "r.", label="stacked profile")

@@ -12,7 +12,7 @@ import math
 
 from scipy.optimize import curve_fit
 from multiprocessing import Process, Manager, Lock
-from stackem import utils
+from Stackem import utils
 
 
 class load(object):
@@ -22,9 +22,6 @@ class load(object):
                  verbosity=0, beam2pix=False):
 
         self.log = utils.logger(verbosity)
-
-        ncpu = psutil.cpu_count()
-        self.log.info("Found {:d} CPUs".format(ncpu))
 
         self.log.info("Laoding Image data and catalog info")
 
@@ -181,7 +178,7 @@ were too close to an edge".format(self.excluded.value, nprofs))
         rad =  numpy.sqrt(rad[numpy.newaxis, :]**2+rad[:, numpy.newaxis]**2)
         mask = rad<=self.beamPix/2
 
-        pixels_per_beam = (6/math.pi)*(self.beamPix/2.)***2 if self.beam2pix else 1.0
+        pixels_per_beam = (6/math.pi)*(self.beamPix/2.)**2 if self.beam2pix else 1.0
         profile = (stack*mask).sum((1,2))/self.weights.value / pixels_per_beam
 
         return profile
