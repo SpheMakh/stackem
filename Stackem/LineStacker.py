@@ -27,7 +27,6 @@ class load(object):
 
         self.imagename = imagename
         self.catalogname = catalogname
-        self.beam = beam
         self.delimiter = delimiter
 
         # Load data
@@ -43,15 +42,15 @@ class load(object):
         
         cubeslice = [slice(None)]*self.ndim
         if self.ndim >3:
-            stokes_ind = self.ndim - _ind(self.hdr, "STOKES")
+            stokes_ind = self.ndim - utils.fitsInd(self.hdr, "STOKES")
             cubeslice[stokes_ind] = 0
 
-        self.cube = data[cubeslice]
+        self.cube = self.data[cubeslice]
 
         self.profiles = Manager().list([])
         self.weights = Manager().Value("d", 0)
 
-        ind = _ind(self.hdr, "FREQ")
+        ind = utils.fitsInd(self.hdr, "FREQ")
         self.crpix = self.hdr["crpix%d"%ind]
         self.crval = self.hdr["crval%d"%ind]
         self.dfreq = self.hdr["cdelt%d"%ind]
@@ -60,16 +59,29 @@ class load(object):
         self.width = int(width*1e6/self.dfreq)
 
         # Find restoring beam in FITS header if not specified
-        if self.beam is None:
+        if isinstance(beam, (float, int)):
+            if beam==0:
+                beam = None
+            else:
+                self.bmaj = self.bmin = beam
+                self.bpa = 0
+        elif isinstance(beam, (list, tuple)):
+            self.bmaj, self.bmin, self.bpa = beam
+
+        elif beam is None:
             try:
-                bmaj = self.hdr["bmaj"]
-                bmin = self.hdr["bmin"]
+                self.bmaj = self.hdr["bmaj"]
+                self.bmin = self.hdr["bmin"]
+                self.bpa = self.hdr["bpa"]
             except KeyError: 
                 self.log.critical("Beam not specified, and no beam information in FITS header")
+        else:
+            raise TypeError("Beam must be a list, tuple, int or float")
 
-            self.beam = math.sqrt(bmaj*bmin)
+        self.bmajPix = int(self.bmaj/abs( self.wcs.getXPixelSizeDeg() ) )
+        self.bminPix = int(self.bmin/abs( self.wcs.getXPixelSizeDeg() ) )
 
-        self.beamPix = int(self.beam/abs( self.wcs.getXPixelSizeDeg() ) )
+        self.beamPix = self.bmajPix
         self.beam2pix = beam2pix
     
         self.excluded = Manager().Value("d",0)
@@ -88,7 +100,6 @@ class load(object):
         zend = cfreqPix + self.width/2
 
         beamPix = self.beamPix
-        #raise ValueError(beamPix)
 
         ystart, yend = (decpix-beamPix/2.), (decpix+beamPix/2.)
         xstart, xend = (rapix-beamPix/2.), (rapix+beamPix/2.)
@@ -173,12 +184,10 @@ class load(object):
 were too close to an edge".format(self.excluded.value, nprofs))
         
         stack = numpy.sum(self.profiles, 0)
-        # Create circular mask
-        rad = numpy.linspace(-self.beamPix/2, self.beamPix/2, self.beamPix)
-        rad =  numpy.sqrt(rad[numpy.newaxis, :]**2+rad[:, numpy.newaxis]**2)
-        mask = rad<=self.beamPix/2
 
-        pixels_per_beam = (6/math.pi)*(self.beamPix/2.)**2 if self.beam2pix else 1.0
+        mask = utils.elliptical_mask(stack[0], self.bmajPix/2, self.bminPix/2, self.bpa)
+
+        pixels_per_beam = mask.sum() if self.beam2pix else 1.0
         profile = (stack*mask).sum((1,2))/self.weights.value / pixels_per_beam
 
         return profile

@@ -41,15 +41,31 @@ class load(object):
 
 
         self.data, self.hdr, self.wcs = utils.loadFits(imagename)
-        if beam:
-            self.beam = beam
-        else:
+
+        # Find restoring beam in FITS header if not specified
+        if isinstance(beam, (float, int)):
+            if beam==0:
+                beam = None
+            else:
+                self.bmaj = self.bmin = beam
+                self.bpa = 0
+        elif isinstance(beam, (list, tuple)):
+            self.bmaj, self.bmin, self.bpa = beam
+
+        elif beam is None:
             try:
-                ex = self.hdr["bmaj"]
-                ey = self.hdr["bmin"]
-                self.beam = math.sqrt(ex*ey)
-            except ValueError:
-                self.log.error("Could not find Beam info. in header. Please specify beam")
+                self.bmaj = self.hdr["bmaj"]
+                self.bmin = self.hdr["bmin"]
+                self.bpa = self.hdr["bpa"]
+            except KeyError: 
+                self.log.critical("Beam not specified, and no beam information in FITS header")
+        else:
+            raise TypeError("Beam must be a list, tuple, int or float")
+
+        self.bmajPix = int(self.bmaj/abs( self.wcs.getXPixelSizeDeg() ) )
+        self.bminPix = int(self.bmin/abs( self.wcs.getXPixelSizeDeg() ) )
+
+        self.beamPix = self.bmajPix
 
         self.ndim = self.hdr["naxis"]
 
@@ -63,7 +79,6 @@ class load(object):
 
         self.cell = self.wcs.getXPixelSizeDeg()
 
-        self.beamPix = int( float(self.beam)/self.cell)
         self.width = self.beamPix*self.beam if beam else self.beamPix*10
         self.stamps = manager.list([])
         self.beam2pix = beam2pix

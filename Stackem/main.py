@@ -45,7 +45,7 @@ def main():
     add("-vbl", "--vebosity-level", dest="vbl", choices=["0", "1", "2", "3"], default="0",
             help="Verbosity level. 0-> INFO, 1-> DEBUG, 2-> ERROR, 3-> CRITICAL. Default is 0")
 
-    add("-b", "--beam", type=float, default=0,
+    add("-b", "--beam", metavar="BMIN[:BMIN:BPA]",
             help="PSF (a.k.a dirty beam) FWHM in degrees. No default")
 
     add("-b2p", "--beam2pix", action="store_true",
@@ -66,49 +66,86 @@ def main():
     else:
         catalogname, delimiter = catalog_string[0], ","
 
+    if args.beam:
+        beam = args.beam.split(":")
+        if len(beam)==1:
+            beam = float(beam[0])
+        elif len(beam)==2:
+            beam = map(float, beam) + [0]
+        else:
+            beam = map(float, beam)
+    else:
+        beam = None
+
     pylab.clf()
-    pylab.figure(figsize=(20,20))
 
     prefix = args.prefix or "stackem_default"
 
     if args.line:
+        pylab.figure(figsize=(15,10))
         from Stackem import LineStacker
 
         stack = LineStacker.load(args.image, catalogname, delimiter=delimiter,
-                beam=args.beam, width=args.width, beam2pix=args.beam2pix,
+                beam=beam, width=args.width, beam2pix=args.beam2pix,
                 verbosity=args.vbl)
 
         stacked_line = stack.stack()*1e6 # convert to uJy
-        gfit = stack.fit_gaussian(stacked_line)
+        peak, nu, sigma = gfit_params = stack.fit_gaussian(stacked_line)
+        gfit = utils.gauss(range(stack.width), *gfit_params)
 
-        freqs = (linspace(-stack.width/2, stack.width/2, stack.width)*stack.dfreq - stack.freq0)*1e9 # convert to GHz
+        freqs = (numpy.linspace(-stack.width/2, stack.width/2, stack.width)*stack.dfreq - stack.freq0)*1e-9 # convert to GHz
 
         # plot profile
         pylab.plot(freqs, stacked_line, "r.", label="stacked profile")
         pylab.plot(freqs, gfit, "k-", label="Gaussian fit")
         pylab.grid()
+        pylab.xlim(freqs[0], freqs[-1])
         pylab.xlabel("Frequency [GHz]")
-        pylab.xlabel("Flux density [mJy/{:s}]".format("beam" if args.beam2pix else "pixel"))
+        pylab.ylabel("Flux density [mJy/{:s}]".format("beam" if args.beam2pix else "pixel"))
         pylab.legend(loc=1)
-        pylab.savepng(prefix+"-line.png")
+        pylab.savefig(prefix+"-line.png")
         pylab.clf()
 
         # save
         numpy.savetxt(prefix+"-line.txt", stacked_line, delimiter=",")
+
+        with open(prefix+"-line_stats.txt", "w") as info:
+            tot = sigma*peak*math.sqrt(2*math.pi)
+
+            stack.log.info("Gaussian Fit parameters.")
+            info.write("Gaussian Fit parameters\n")
+
+            info.write("Peak Flux : {:.4g} uJy\n".format(peak))
+            stack.log.info("Peak Flux : {:.4g} uJy".format(peak))
+
+            info.write("Integrated Flux : {:.4g} uJy\n".format(tot))
+            stack.log.info("Integrated Flux : {:.4g} uJy".format(tot))
+
+            info.write("Profile width : {:.4g} MHz \n".format(sigma*stack.dfreq))
+            stack.log.info("Profile width : {:.4g} kHz".format(sigma*stack.dfreq*1e-3))
+
         stack.log.info("Line stacking ran successfully. Find your outputs at {:s}-line*".format(prefix))
 
     if args.cont:
+        pylab.figure(figsize=(20,20))
         from Stackem import ContStacker
 
         stack = ContStacker.load(args.image, catalogname, delimiter=delimiter, 
-                beam=args.beam, beam2pix=args.beam2pix, width=args.width,
+                beam=beam, beam2pix=args.beam2pix, width=args.width,
                 verbosity=args.vbl)
 
         stacked = stack.stack()
-        flux = utils.sum_region(stacked, stack.beamPix/2)
+        mask = utils.elliptical_mask(stacked, stack.bmajPix/2, stack.bminPix/2, stack.bpa)
+        print(stack.bmajPix)
+        pylab.imshow(mask)
+        pylab.savefig("mask.png")
+        pylab.imshow(stacked)
+        pylab.savefig("image.png")
+        pylab.clf()
+        flux = (mask*stacked).sum()
 
         if args.beam2pix:
-            pixels_per_beam = (6/math.pi)*(stack.beamPix/2.)**2
+            pixels_per_beam = mask.sum()
 
         rms = utils.negnoise(stacked)
 

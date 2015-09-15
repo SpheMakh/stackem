@@ -5,6 +5,7 @@ import numpy
 import pyfits
 from astLib.astWCS import WCS
 import logging
+import scipy.ndimage as ndimage
 
 
 def logger(level=0):
@@ -71,3 +72,15 @@ def negnoise(data):
 
 def gauss(x, a0, mu, sigma):
     return  a0*numpy.exp(-(x-mu)**2/(2*sigma**2))
+
+
+def elliptical_mask(data, emaj, emin, pa):
+        
+        px, py = data.shape
+        xx, yy = numpy.ogrid[-px/2:px/2, -py/2:py/2]
+        mask0 = ( (xx/emaj)**2 + (yy/emin)**2 <= 1 )*1
+        rmask = ndimage.rotate(mask0, angle=pa, reshape=False)
+
+        return rmask
+
+        
