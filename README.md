@@ -1,5 +1,4 @@
 # Stackem
-## Gota Stackem all!
 
 This is a continuum and line stacking tool. See the stackem [wiki] (link to wiki) for more details, and examples. 
 
