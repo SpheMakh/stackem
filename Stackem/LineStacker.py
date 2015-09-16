@@ -184,9 +184,10 @@ were too close to an edge".format(self.excluded.value, nprofs))
         
         stack = numpy.sum(self.profiles, 0)
 
-        mask = utils.elliptical_mask(stack[0], self.bmajPix/2, self.bminPix/2, self.bpa)
+        if self.beam2pix:
+            mask = utils.elliptical_mask(stack[0], self.bmajPix/2, self.bminPix/2, self.bpa)
+            stack = utils.gauss_weights(stack, self.bmajPix/2, self.bminPix/2, mask=mask)
 
-        stack = utils.gauss_weights(stack, self.bmajPix/2, self.bminPix/2, mask=mask)
         profile = stack.sum((1,2))/self.weights.value
 
         return profile
