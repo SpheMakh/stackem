@@ -90,7 +90,6 @@ class load(object):
 
 
     def profile(self, radeg, decdeg, cfreq, weight, pid):
-
         
         rapix, decpix = self.wcs.wcs2pix(radeg, decdeg)
 
@@ -187,8 +186,8 @@ were too close to an edge".format(self.excluded.value, nprofs))
 
         mask = utils.elliptical_mask(stack[0], self.bmajPix/2, self.bminPix/2, self.bpa)
 
-        pixels_per_beam = mask.sum() if self.beam2pix else 1.0
-        profile = (stack*mask).sum((1,2))/self.weights.value / pixels_per_beam
+        stack = utils.gauss_weights(stack, self.bmajPix/2, self.bminPix/2, mask=mask)
+        profile = stack.sum((1,2))/self.weights.value
 
         return profile
 
@@ -204,7 +203,6 @@ were too close to an edge".format(self.excluded.value, nprofs))
         mu = xx[nn/2]
         peak = profile.max()
         
-
         def res(p0, x, y):
             peak, mu, sigma = p0
             yf = utils.gauss(x, peak, mu, sigma)

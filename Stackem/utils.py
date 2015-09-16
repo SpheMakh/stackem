@@ -74,13 +74,44 @@ def gauss(x, a0, mu, sigma):
     return  a0*numpy.exp(-(x-mu)**2/(2*sigma**2))
 
 
+def gauss2d(height, center_x, center_y, width_x, width_y, beta=0):
+    """Returns a gaussian function with the given parameters"""
+
+    width_x = float(width_x)
+    width_y = float(width_y)
+    fct_x = lambda x: (x-center_x)**2/(2*width_x**2)
+    fct_y = lambda y: (y-center_y)**2/(2*width_y**2)
+    fct_xy = lambda x,y: beta*(x-center_x)*(y-center_x)/(width_x*width_y)
+
+    return lambda x, y: height * numpy.exp(-fct_x(x) - fct_xy(x, y)-fct_y(y))
+
+
 def elliptical_mask(data, emaj, emin, pa):
         
-        px, py = data.shape
-        xx, yy = numpy.ogrid[-px/2:px/2, -py/2:py/2]
-        mask0 = ( (xx/emaj)**2 + (yy/emin)**2 <= 1 )*1
-        rmask = ndimage.rotate(mask0, angle=pa, reshape=False)
+    px, py = data.shape
+    _max = numpy.where(data==data.max())
+    ox = _max[0][0] - px/2
+    oy = _max[1][0] - py/2
 
-        return rmask
+    xx, yy = numpy.ogrid[-px/2:px/2, -py/2:py/2]
+    mask0 = ( ((xx-ox)/emaj)**2 + ((yy-oy)/emin)**2 <= 1 )*1
+    rmask = ndimage.rotate(mask0, angle=pa, reshape=False)
+    
+    return rmask!=0 #[(pxn-px)/2:-(pxn-px)/2, (pyn-py)/2:-(pyn-py)/2]
 
-        
+
+def gauss_weights(data, sigma1, sigma2, mask=None):
+    
+    px, py = data.shape[-2:]
+
+    x, y = [ numpy.linspace(-a/2, a/2, a) for a in [px, py] ]
+    xx, yy = numpy.meshgrid(x, y)
+
+    _max = numpy.where(data==data.max())
+    ox = _max[0][0] - px/2
+    oy = _max[1][0] - py/2
+
+    mask = 1 if mask is None else mask
+    weight = gauss2d(1, ox, oy, sigma1, sigma2)(xx, yy)*mask
+
+    return (data*mask)*weight/weight.sum()

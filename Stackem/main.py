@@ -14,7 +14,7 @@ import sys
 from argparse import ArgumentParser
 import astLib.astCoords as coords
 
-matplotlib.rcParams.update({'font.size': 20})
+matplotlib.rcParams.update({'font.size': 18})
 
 def main():
 
@@ -80,9 +80,9 @@ def main():
     pylab.clf()
 
     prefix = args.prefix or "stackem_default"
+    pylab.figure(figsize=(15,10))
 
     if args.line:
-        pylab.figure(figsize=(15,10))
         from Stackem import LineStacker
 
         stack = LineStacker.load(args.image, catalogname, delimiter=delimiter,
@@ -127,7 +127,7 @@ def main():
         stack.log.info("Line stacking ran successfully. Find your outputs at {:s}-line*".format(prefix))
 
     if args.cont:
-        pylab.figure(figsize=(20,20))
+        pylab.figure(figsize=(20, 20))
         from Stackem import ContStacker
 
         stack = ContStacker.load(args.image, catalogname, delimiter=delimiter, 
@@ -135,25 +135,17 @@ def main():
                 verbosity=args.vbl)
 
         stacked = stack.stack()
-        mask = utils.elliptical_mask(stacked, stack.bmajPix/2, stack.bminPix/2, stack.bpa)
-        print(stack.bmajPix)
-        pylab.imshow(mask)
-        pylab.savefig("mask.png")
-        pylab.imshow(stacked)
-        pylab.savefig("image.png")
-        pylab.clf()
-        flux = (mask*stacked).sum()
 
-        if args.beam2pix:
-            pixels_per_beam = mask.sum()
+        mask = utils.elliptical_mask(stacked, stack.bmajPix/2., stack.bminPix/2., stack.bpa)
+
+        flux = utils.gauss_weights(stacked, stack.bmajPix/2., stack.bmajPix/2., mask=mask)
+        flux = flux.sum()
 
         rms = utils.negnoise(stacked)
 
         with open(prefix+"-cont.txt", "w") as cont:
-            stack.log.info("Stacked flux: {:.3g} +/- {:.3g} uJy/beam".format(flux*1e6, rms*1e6))
-            stack.log.info("Stacked flux: {:.3g} +/- {:.3g} uJy/Pixel".format(flux/pixels_per_beam*1e6, rms/pixels_per_beam*1e6))
+            stack.log.info("Stacked flux: {:.3g} +/- {:.3g} uJy".format(flux*1e6, rms*1e6))
             cont.write("Stacked flux: {:.3g} +/- {:.3g} uJy/beam".format(flux*1e6, rms*1e6))
-            cont.write("Stacked flux: {:.3g} +/- {:.3g} uJy/Pixel".format(flux/pixels_per_beam*1e6, rms/pixels_per_beam*1e6))
 
         # Plot stacked image, and cross-sections
 
@@ -166,14 +158,15 @@ def main():
 
         gs.update(wspace=0.05, hspace=0.05)
         ax1 = pylab.subplot(gs[2])
-        ax2 = pylab.subplot(gs[3])
-        ax3 = pylab.subplot(gs[0])
+        ax2 = pylab.subplot(gs[0], sharex=ax1)
+        ax3 = pylab.subplot(gs[3], sharey=ax1)
 
-        pylab.setp(ax2.get_yticklabels(), visible=False)
-        pylab.setp(ax2.get_xticklabels(), rotation=90)
-        pylab.setp(ax3.get_xticklabels(), visible=False)
+        pylab.setp(ax3.get_yticklabels(), visible=False)
+        pylab.setp(ax3.get_xticklabels(), rotation=90)
+        pylab.setp(ax2.get_xticklabels(), visible=False)
 
-        ax1.imshow(rotated)
+        ax1.imshow(stacked, interpolation="nearest")
+        ax1.set_aspect("auto")
         ra0, dec0 = stack.wcs.getCentreWCSCoords()
         ras = numpy.linspace(stack.width/2, -stack.width/2, stack.width)*stack.cell - ra0
         decs = numpy.linspace(-stack.width/2, stack.width/2, stack.width)*stack.cell - dec0
@@ -184,10 +177,12 @@ def main():
         ax1.set_ylabel("DEC [dms]")
         pylab.setp(ax1.get_xticklabels(), rotation=90)
 
-        ax2.plot(rotated[stack.width/2,:]*1e6, range(stack.width))
-        ax3.plot(rotated[:,stack.width/2]*1e6)
-        ax2.set_xlabel("Flux density [uJy]")
-        ax3.set_ylabel("Flux density [uJy]")
+        ax2.plot(rotated[:,stack.width/2]*1e6)
+        ax3.plot(rotated[stack.width/2,:][::-1]*1e6, range(stack.width))
+        ax3.set_ylim(0,stack.width-1)
+        ax2.set_xlim(0,stack.width-1)
+        ax2.set_ylabel("Flux density [uJy/beam]")
+        ax3.set_xlabel("Flux density [uJy/beam]")
         pylab.savefig(prefix+"-cont.png")
 
         # save stacked image as fits
