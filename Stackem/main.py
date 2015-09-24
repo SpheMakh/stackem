@@ -57,14 +57,20 @@ def main():
     add("-C", "--cont", action="store_true",
             help="Do continuum stacking")
 
+    add("-mc", "--monte-carlo", metavar="SAMPLES:START:FINISH:N", default=False,
+            help="Do a monte carlo analysis of the noise. That is, "
+                  "stack on START random positions NSAMPLES times. "
+                  "Repeat this N times with (FINISH-START)/N increments."
+                  "if set -mc/--mont-carlo=yes, default is '400:1000:8000:7'")
+
     args = parser.parse_args()
 
-
-    catalog_string = args.catalog.split(":")
-    if len(catalog_string)>1:
-        catalgname, delimiter = catalog_string
-    else:
-        catalogname, delimiter = catalog_string[0], ","
+    if args.catalog:
+        catalog_string = args.catalog.split(":")
+        if len(catalog_string)>1:
+            catalgname, delimiter = catalog_string
+        else:
+            catalogname, delimiter = catalog_string[0], ","
 
     if args.beam:
         beam = args.beam.split(":")
@@ -131,7 +137,7 @@ def main():
         from Stackem import ContStacker
 
         stack = ContStacker.load(args.image, catalogname, delimiter=delimiter, 
-                beam=beam, beam2pix=args.beam2pix, width=args.width,
+                beam=beam, beam2pix=args.beam2pix, width=int(args.width),
                 verbosity=args.vbl)
 
         stacked = stack.stack()
@@ -177,10 +183,10 @@ def main():
         ax1.set_ylabel("DEC [dms]")
         pylab.setp(ax1.get_xticklabels(), rotation=90)
 
-        ax2.plot(rotated[:,stack.width/2]*1e6)
+        ax2.plot(rotated[:, stack.width/2]*1e6)
         ax3.plot(rotated[stack.width/2,:][::-1]*1e6, range(stack.width))
-        ax3.set_ylim(0,stack.width-1)
-        ax2.set_xlim(0,stack.width-1)
+        ax3.set_ylim(0, stack.width-1)
+        ax2.set_xlim(0, stack.width-1)
         ax2.set_ylabel("Flux density [uJy/beam]")
         ax3.set_xlabel("Flux density [uJy/beam]")
         pylab.savefig(prefix+"-cont.png")
@@ -192,3 +198,24 @@ def main():
         pyfits.writeto(prefix+"-cont.fits", stacked, hdr, clobber=True)
 
         stack.log.info("Continuum stacking ran successfully. Find your outputs at {:s}-line*".format(prefix))
+
+    if args.monte_carlo:
+        if args.monte_carlo in ["yes", "1", "True", "true"]:
+            runs, stacks = 400, xrange(1000, 8000, 1000)
+        else:
+            a, b, c, d = map(int, args.monte_carlo.split(":"))
+            runs, stacks = a, xrange(b, c, (c-b)/d)
+
+        from Stackem import ContStacker
+        
+        noise = ContStacker.mc_noise_stack(args.image, runs=runs, stacks=stacks, 
+                beam=beam, beam2pix=args.beam2pix, width=args.width,
+                verbosity=args.vbl)
+
+        pylab.clf()
+        pylab.loglog(stacks, noise)
+        pylab.grid()
+        pylab.ylabel("Log (Noise [Jy/beam])")
+        pylab.xlabel("Log (Random Stacks). {:d} Samples".format(runs))
+        pylab.savefig(prefix+"-cont_mc.png")
+        pylab.clf()
