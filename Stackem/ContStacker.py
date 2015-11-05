@@ -17,7 +17,7 @@ class load(object):
 
     def  __init__(self, imagename, catalogname=None, beam=0, width=None,
                   stokes_ind=0, delimiter=",", beam2pix=False, verbosity=0,
-                 progress=True):
+                 progress=True, cores=2):
         """ Continuum stacking tool
             imagename: FITS image
             catalogname: List of RA, DEC values. Weights can be added as a 3rd column
@@ -27,6 +27,8 @@ class load(object):
 
         self.imagename = imagename
         self.progress = progress
+        self.active = manager.Value("d",0)
+        self.cores = cores
 
         if catalogname:
             self.catalogname = catalogname
@@ -55,7 +57,7 @@ class load(object):
             if beam==0:
                 beam = None
             else:
-                self.bmaj = self.bmin = beam
+                self.bmaj = self.bmin = beam/3600.0 # convert to arcsec
                 self.bpa = 0
         elif isinstance(beam, (list, tuple)):
             self.bmaj, self.bmin, self.bpa = beam
@@ -112,15 +114,24 @@ class load(object):
             self.log.debug("Stacking position {:d} of {:d}".format(self.track.value, npos))
             self.lock.release()
 
+            self.active.value -= 1
+
         procs = []
         range_ = range(10, 110, 10)
 
-        if self.progress:
-            print("Progress:"),
-        for ra, dec, weight in catalog:
+        #if self.progress:
+        print("Progress:"),
+
+        counter = 0
+        while counter <= npos-1:
+            if self.active.value >= self.cores:
+                continue
+            self.active.value += 1
+            ra, dec, weight = catalog[counter]
             proc = Process(target=worker, args=(ra, dec, weight))
             procs.append(proc)
             proc.start()
+            counter += 1
 
             if self.progress:
                 nn = int(self.track.value/float(self.npos)*100)
@@ -136,7 +147,6 @@ class load(object):
         self.log.debug("Sum of the weights is {:f}".format(self.weights.value))
 
         stacked = numpy.array(self.stamps).sum(0)/self.weights.value
-        print stacked
 
         return stacked
 

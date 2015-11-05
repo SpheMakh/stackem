@@ -2,9 +2,10 @@
 
 import os
 from setuptools import setup
+import stackem
 
 setup(name="stackem",
-    version="0.1.0",
+    version=stackem.__version__,
     description="Image plane stacking tools.",
     author="Sphesihle Makhathini",
     author_email="Sphesihle Makhathini <sphemakh@gmail.com>",

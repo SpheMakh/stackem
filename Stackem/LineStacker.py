@@ -19,9 +19,11 @@ class load(object):
     
     def __init__(self, imagename, catalogname, 
                  width=1, beam=None, delimiter=",", 
-                 verbosity=0, beam2pix=False):
+                 verbosity=0, beam2pix=False, cores=2):
 
         self.log = utils.logger(verbosity)
+        self.active = Manager().Value("d", 0)
+        self.cores = cores
 
         self.log.info("Laoding Image data and catalog info")
 
@@ -63,10 +65,12 @@ class load(object):
             if beam==0:
                 beam = None
             else:
-                self.bmaj = self.bmin = beam
+                self.bmaj = self.bmin = beam/3600.
                 self.bpa = 0
         elif isinstance(beam, (list, tuple)):
             self.bmaj, self.bmin, self.bpa = beam
+            self.bmaj /= 3600.
+            self.bmin /= 3600.
 
         elif beam is None:
             try:
@@ -151,6 +155,7 @@ class load(object):
         self.track.value += 1
         self.profiles.append(pcube*weight)
         self.lock.release()
+        self.active.value -= 1
 
         
     def stack(self):
@@ -163,10 +168,18 @@ class load(object):
         procs = []
         range_ = range(10, 110, 10)
         print("Progress:"),
-        for i, (ra, dec, cfreq, w, _id) in enumerate(self.catalog):
-            proc = Process(target=self.profile, args = (ra, dec, cfreq, w, i) )
+
+        counter = 0
+        while counter <= nprofs-1:
+            if self.active >= self.cores:
+                continue
+
+            ra, dec, cfreq, w, _id = self.catalog
+            proc = Process(target=self.profile, args = (ra, dec, cfreq, w, counter) )
             proc.start()
             procs.append(proc)
+            counter += 1
+            self.active.value += 1
 
             nn = int(self.track.value/float(self.nprofs)*100)
             if nn in range_:
@@ -188,7 +201,7 @@ were too close to an edge".format(self.excluded.value, nprofs))
             mask = utils.elliptical_mask(stack[0], self.bmajPix/2, self.bminPix/2, self.bpa)
             stack = utils.gauss_weights(stack, self.bmajPix/2, self.bminPix/2, mask=mask)
 
-        profile = stack.sum((1,2))/self.weights.value
+        profile = stack.sum((1, 2))/self.weights.value
 
         return profile
 

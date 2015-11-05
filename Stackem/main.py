@@ -13,13 +13,16 @@ from Stackem import utils
 import sys
 from argparse import ArgumentParser
 import astLib.astCoords as coords
+import os
 
 matplotlib.rcParams.update({'font.size': 18})
 
-def main():
+path = os.path.realpath(__file__)
+path = os.path.dirname(path)
 
-    __version_info__ = (0,0,1)
-    __version__ = ".".join( map(str,__version_info__) )
+execfile("%s/__init__.py"%path)
+
+def main():
 
     for i, arg in enumerate(sys.argv):
         if (arg[0] == '-') and arg[1].isdigit(): sys.argv[i] = ' ' + arg
@@ -28,6 +31,9 @@ def main():
 
     add = parser.add_argument
     add("-v","--version", action='version',version='{:s} version {:s}'.format(parser.prog, __version__))
+
+    add("-j", "--ncores", type=int, default=1,
+            help="Number of cores to use")
 
     add("-i", "--image", 
             help="FITS image name")
@@ -93,7 +99,7 @@ def main():
 
         stack = LineStacker.load(args.image, catalogname, delimiter=delimiter,
                 beam=beam, width=args.width, beam2pix=args.beam2pix,
-                verbosity=args.vbl)
+                verbosity=args.vbl, cores=args.ncores)
 
         stacked_line = stack.stack()*1e6 # convert to uJy
         peak, nu, sigma = gfit_params = stack.fit_gaussian(stacked_line)
@@ -138,7 +144,7 @@ def main():
 
         stack = ContStacker.load(args.image, catalogname, delimiter=delimiter, 
                 beam=beam, beam2pix=args.beam2pix, width=int(args.width),
-                verbosity=args.vbl)
+                verbosity=args.vbl, cores=args.ncores)
 
         stacked = stack.stack()
 

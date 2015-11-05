@@ -115,3 +115,9 @@ def gauss_weights(data, sigma1, sigma2, mask=None):
     weight = gauss2d(1, ox, oy, sigma1, sigma2)(xx, yy)*mask
 
     return (data*mask)*weight/weight.sum()
+
+
+def beam2pix(data, bmaj, bmin, cellsize):
+
+    fct = 1.114*(cellsize*cellsize)/bmaj/bmaj
+    return data*fct
