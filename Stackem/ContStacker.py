@@ -9,7 +9,6 @@ import pylab
 from Stackem import utils
 
 from multiprocessing import Process, Manager, Lock
-import psutil
 manager = Manager()
 
 
