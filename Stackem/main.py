@@ -44,18 +44,12 @@ def main():
     add("-p", "--prefix", default="gota_stackem_all",
             help="Prefix for output products.")
 
-    add("-w", "--width", type=float, default=0,
+    add("-w", "--width", type=float, default=50,
             help="For line stacking: Band width [MHz] to sample across frequency (for line stacking). Default is 1."
-                 "For continuum stacking: Width (in beams) of subregion to stack. Default is 10 beams")
+                 "For continuum stacking: Width (in pixels) of subregion to stack. Default is 50")
 
     add("-vbl", "--vebosity-level", dest="vbl", choices=["0", "1", "2", "3"], default="0",
             help="Verbosity level. 0-> INFO, 1-> DEBUG, 2-> ERROR, 3-> CRITICAL. Default is 0")
-
-    add("-b", "--beam", metavar="BMIN[:BMIN:BPA]",
-            help="PSF (a.k.a dirty beam) FWHM in degrees. No default")
-
-    add("-b2p", "--beam2pix", action="store_true",
-            help="Do Jy/beam to Jy/pixel conversion")
 
     add("-L", "--line", action="store_true",
             help="Do line stacking")
@@ -78,17 +72,6 @@ def main():
         else:
             catalogname, delimiter = catalog_string[0], ","
 
-    if args.beam:
-        beam = args.beam.split(":")
-        if len(beam)==1:
-            beam = float(beam[0])
-        elif len(beam)==2:
-            beam = map(float, beam) + [0]
-        else:
-            beam = map(float, beam)
-    else:
-        beam = None
-
     pylab.clf()
 
     prefix = args.prefix or "stackem_default"
@@ -98,8 +81,8 @@ def main():
         from Stackem import LineStacker
 
         stack = LineStacker.load(args.image, catalogname, delimiter=delimiter,
-                beam=beam, width=args.width, beam2pix=args.beam2pix,
-                verbosity=args.vbl, cores=args.ncores)
+                                 width=args.width, verbosity=args.vbl, 
+                                 cores=args.ncores)
 
         stacked_line = stack.stack()*1e6 # convert to uJy
         peak, nu, sigma = gfit_params = stack.fit_gaussian(stacked_line)
@@ -143,25 +126,16 @@ def main():
         from Stackem import ContStacker
 
         stack = ContStacker.load(args.image, catalogname, delimiter=delimiter, 
-                beam=beam, beam2pix=args.beam2pix, width=int(args.width),
-                verbosity=args.vbl, cores=args.ncores)
+                                 width=int(args.width),
+                                 verbosity=args.vbl, cores=args.ncores)
 
         stacked = stack.stack()
 
-        mask = utils.elliptical_mask(stacked, stack.bmajPix/2., stack.bminPix/2., stack.bpa)
-
-        flux = utils.gauss_weights(stacked, stack.bmajPix/2., stack.bmajPix/2., mask=mask)
-        flux = flux.sum()
-
+        rotated = numpy.flipud(stacked)
         rms = utils.negnoise(stacked)
-
-        with open(prefix+"-cont.txt", "w") as cont:
-            stack.log.info("Stacked flux: {:.3g} +/- {:.3g} uJy".format(flux*1e6, rms*1e6))
-            cont.write("Stacked flux: {:.3g} +/- {:.3g} uJy/beam".format(flux*1e6, rms*1e6))
 
         # Plot stacked image, and cross-sections
 
-        rotated = numpy.rot90(stacked.T)
         import matplotlib.gridspec as gridspec
         
         gs = gridspec.GridSpec(2, 2,

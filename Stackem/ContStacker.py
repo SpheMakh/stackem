@@ -14,13 +14,12 @@ manager = Manager()
 
 class load(object):
 
-    def  __init__(self, imagename, catalogname=None, beam=0, width=None,
-                  stokes_ind=0, delimiter=",", beam2pix=False, verbosity=0,
+    def  __init__(self, imagename, catalogname=None, width=50,
+                  stokes_ind=0, delimiter=",", verbosity=0,
                  progress=True, cores=2):
         """ Continuum stacking tool
             imagename: FITS image
             catalogname: List of RA, DEC values. Weights can be added as a 3rd column
-            beam: PSF FWHM in degrees
             stokes_id: Index of stokes plane to stack (0,1,2,3) -> (I,Q,U,V)
         """
 
@@ -51,31 +50,6 @@ class load(object):
         self.centre = self.wcs.getCentreWCSCoords()
         self.log.info("Image Centre RA,DEC {:+.3g}, {:+.3g} Deg".format(*self.centre))
 
-        # Find restoring beam in FITS header if not specified
-        if isinstance(beam, (float, int)):
-            if beam==0:
-                beam = None
-            else:
-                self.bmaj = self.bmin = beam/3600.0 # convert to arcsec
-                self.bpa = 0
-        elif isinstance(beam, (list, tuple)):
-            self.bmaj, self.bmin, self.bpa = beam
-
-        elif beam is None:
-            try:
-                self.bmaj = self.hdr["bmaj"]
-                self.bmin = self.hdr["bmin"]
-                self.bpa = self.hdr["bpa"]
-            except KeyError: 
-                self.log.critical("Beam not specified, and no beam information in FITS header")
-        else:
-            raise TypeError("Beam must be a list, tuple, int or float")
-
-        self.bmajPix = int(self.bmaj/abs( self.wcs.getXPixelSizeDeg() ) )
-        self.bminPix = int(self.bmin/abs( self.wcs.getXPixelSizeDeg() ) )
-
-        self.beamPix = self.bmajPix
-
         self.ndim = self.hdr["naxis"]
 
         stokes = self.ndim - utils.fitsInd(self.hdr, "STOKES")
@@ -84,13 +58,11 @@ class load(object):
         imslice = [slice(None)]*self.ndim
         imslice[stokes] = stokes_ind
         self.data = self.data[imslice].sum(0)
-        #raise SystemError((self.data.shape, imslice, freq))
 
         self.cell = self.wcs.getXPixelSizeDeg()
 
-        self.width = self.beamPix*width if beam else self.beamPix*10
+        self.width = width
         self.stamps = manager.list([])
-        self.beam2pix = beam2pix
         self.track = manager.Value("d",0)
         self.lock = Lock()
 
@@ -145,7 +117,7 @@ class load(object):
             print("..100%\n")
         self.log.debug("Sum of the weights is {:f}".format(self.weights.value))
 
-        stacked = numpy.array(self.stamps).sum(0)/self.weights.value
+        stacked = numpy.array(self.stamps).sum(0, dtype=numpy.float64)/self.weights.value
 
         return stacked
 
